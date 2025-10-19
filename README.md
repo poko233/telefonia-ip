@@ -38,15 +38,21 @@ sudo cp /etc/asterisk/extensions_custom.conf /etc/asterisk/extensions_custom.con
 
 2. Sube `extensions_custom.conf` desde este proyecto al servidor (WinSCP, scp o similar) y reemplaza el original.
 
-3. Recarga el dialplan:
+3. Entra a la cli de isable:
 
 ```sh
-sudo asterisk -rx "dialplan reload"
+"asterisk -vvvvvvvvvvvvvvvvvcr"
 ```
 
-4. Sube los audios `.wav` a `/var/lib/asterisk/sounds/custom/` y ajusta permisos/propietario si es necesario (`chown asterisk:asterisk ...`).
+4. Recarga el dialplan:
 
-5. Prueba marcando `*222#` desde un interno.
+```sh
+"dialplan reload"
+```
+
+5. Sube los audios `.wav` a `/var/lib/asterisk/sounds/custom/` y ajusta permisos/propietario si es necesario (`chown asterisk:asterisk ...`).
+
+6. Prueba marcando `*222#` desde un interno.
 
 ---
 
@@ -240,14 +246,3 @@ Valida la contraseña y abre el menú interactivo donde puedes presionar:
 | Listar repetidos | `*222#[PASS]*5#` | `*222#12345*5#` |
 
 ---
-
-## Siguientes pasos y recomendaciones
-
-- Añadir ejemplos de audios y nombres de archivos en `sounds/custom/` para facilitar pruebas (por ejemplo `reminder_example.wav`).
-- Añadir una sección `Troubleshooting` con errores comunes (permisos, formato de fecha/hora, recarga del dialplan).
-- Si quieres, puedo generar un ejemplo de `extensions_custom.conf` simplificado o una plantilla de scripts para crear `.call` files.
-
----
-
-Si quieres que lo deje más visual (con imágenes o badges) dímelo y lo ajusto.
-
