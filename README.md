@@ -50,7 +50,7 @@ sudo cp /etc/asterisk/extensions_custom.conf /etc/asterisk/extensions_custom.con
 "dialplan reload"
 ```
 
-5. Sube los audios `.wav` a `/var/lib/asterisk/sounds/custom/` y ajusta permisos/propietario si es necesario (`chown asterisk:asterisk ...`).
+5. Sube los audios `.wav` a `/var/lib/asterisk/sounds/` y ajusta permisos/propietario si es necesario (`chown asterisk:asterisk ...`).
 
 6. Prueba marcando `*222#` desde un interno.
 
