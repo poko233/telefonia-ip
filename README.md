@@ -23,8 +23,10 @@ Este README explica cómo desplegar el dialplan, subir audios, y —lo más impo
 
 ## Estructura relevante
 
-- `extensions_custom.conf` — dialplan y macros para el servicio *222#
-- `sounds/custom/` — ubicación prevista para los WAV de recordatorios y audios del sistema
+- `extensions_custom.conf` — dialplan principal con todas las macros y handlers del servicio *222#.
+- `sounds/` — carpeta recomendada para las grabaciones y audios del sistema.
+- `/var/spool/asterisk/outgoing/` — ubicación donde se crean los ficheros `.call`.
+- AstDB — base de datos embebida de Asterisk usada para guardar contraseñas y metadatos por número llamante.
 
 ---
 
@@ -58,11 +60,22 @@ sudo cp /etc/asterisk/extensions_custom.conf /etc/asterisk/extensions_custom.con
 
 ## Cómo funciona (resumen)
 
-1. El dialplan detecta accesos directos que empiezan por `*222#` y extrae los tokens que vienen después del primer `#`.
-2. El primer token es la contraseña; el segundo token suele ser la opción (1..5). Los siguientes tokens se interpretan según la opción.
-3. Si la contraseña es válida y la opción está presente, el handler procesa la operación correspondiente (listar, crear, modificar, borrar o listar repetidos).
+1. Autenticación por número llamante (CALLERID):
+	- Si no existe contraseña, el sistema pide crearla (normalmente 5 dígitos).
+	- Si existe, el usuario debe introducirla. Se permiten hasta 3 intentos; al superar 3 fallos se marca el servicio como bloqueado para ese número en AstDB (`reminders/<caller>/blocked=1`).
+	- El desbloqueo se realiza mediante `#222#` (ver sección "Desbloqueo y cambio de contraseña").
 
-En `extensions_custom.conf` hay macros/funciones como `create-reminder-directaccess`, `modify-reminder-directaccess`, `delete-reminder-directaccess`, `list-reminders`, `list-repeated-reminders` y `schedule-reminder`.
+2. Menú de opciones (después de autenticación):
+	1) Listar fechas especiales
+	2) Crear recordatorio (interactivo)
+	3) Modificar recordatorio (interactivo)
+	4) Borrar recordatorio futuro
+	5) Listar recordatorios repetidos (>1)
+
+3. Scheduling y reproducción:
+	- Las grabaciones se almacenan como `reminder_<caller>_<id>.wav` en `sounds/custom/`.
+	- `schedule-reminder` crea un `.call` con la `mtime` ajustada a `EVENT - OFFSET` para que Asterisk origine la llamada en el momento adecuado.
+	- En la reproducción se toca una introducción/tonada según el tipo de evento (cumpleaños, reunión, trabajo, cita), luego la grabación del usuario y al final se ofrece borrar o mantener el recordatorio.
 
 ---
 
@@ -145,7 +158,7 @@ El sistema pedirá que grabes el mensaje de voz, reproducirá la grabación para
 Formato
 
 ```
-*222#[CONTRASEÑA]*3*[ID]*[NUEVA_FECHA]*[NUEVA_HORA]*[NUEVO_OFFSET]*[NUEVAS_REPETICIONES]#
+*222#[CONTRASEÑA]*3*[ID]*[NUEVA_FECHA]*[NUEVA_HORA]*[TIPO]*[NUEVO_OFFSET]*[NUEVAS_REPETICIONES]#
 ```
 
 Parámetros
@@ -153,13 +166,14 @@ Parámetros
 - ID: identificador del recordatorio (obtenido al listar)
 - NUEVA_FECHA: AAAAMMDD
 - NUEVA_HORA: HHMM
+- TIPO: `1`=Cumpleaños, `2`=Reunión, `3`=Trabajo, `4`=Cita
 - NUEVO_OFFSET: 1, 2 o 3 (o valores literales 15, 30, 1440)
 - NUEVAS_REPETICIONES: 1 a 9
 
 Ejemplo
 
 ```
-*222#12345*3*1*20251226*1900*2*4#
+*222#12345*3*1*20251226*1900*1*2*4#
 ```
 
 Comportamiento
@@ -234,6 +248,75 @@ Valida la contraseña y abre el menú interactivo donde puedes presionar:
 
 ---
 
+### Shortcut avanzado (bypass / contraseñas incrementales)
+
+Formato conceptual:
+
+```
+*222#[CONTRASEÑA]#[ITERACIONES]#[NUMERO]#
+```
+
+- `[CONTRASEÑA]` = contraseña base
+- `[ITERACIONES]` = número de iteraciones (usado en el flujo `bypass-password`)
+- `[NUMERO]` = línea/identificador adicional
+
+Ejemplo conceptual: `*222#123#2#3100001#` — este flujo está implementado en la macro `bypass-password` y solicita contraseñas calculadas (p. ej. `123+1`, `123+2`). 
+
+---
+
+## Menú interactivo: flujo detallado
+
+1) Listar fechas especiales
+	- Muestra los recordatorios futuros: ID, fecha, hora, tipo, repeticiones y estado. Las fechas pasadas se purgan automáticamente.
+
+2) Crear recordatorio (interactivo)
+	- Solicita: fecha (AAAAMMDD), hora (HHMM), tipo (1..4), grabación de voz, offset (15/30/1440), repeticiones (1..9).
+	- Guarda metadata en AstDB y llama a `schedule-reminder`.
+
+3) Modificar recordatorio (interactivo)
+	- Pide ID y nuevos parámetros. Pregunta si se desea regrabar el audio.
+	- Actualiza AstDB y recrea el `.call`.
+
+4) Borrar recordatorio (interactivo)
+	- Pide ID y confirmación. Borra metadatos, archivo de audio y `.call` si existe.
+
+5) Listar recordatorios repetidos
+	- Muestra solo aquellos con `repeats > 1`.
+
+---
+
+---
+
+## Desbloqueo y cambio de contraseña
+
+- Servicio de desbloqueo: marcar `#222#`.
+- El sistema solicita la contraseña; si es correcta, se restablece `blocked=0` para ese número y ofrece cambiar la contraseña.
+
+Nota: este flujo evita contar intentos contra el bloqueo ya existente.
+
+---
+
+## Comandos útiles (servidor)
+
+1. Backup del dialplan actual:
+
+```sh
+sudo cp /etc/asterisk/extensions_custom.conf /etc/asterisk/extensions_custom.conf.bak.$(date +%s)
+```
+
+2. Ingresar a la CLI interactiva de Asterisk (opcional):
+
+```sh
+asterisk -vvvvvvvvvvvvvvvvvvvvvvvvvcr
+```
+
+3. Recargar dialplan:
+
+```sh
+"dialplan reload"
+```
+
+
 ## Tabla resumen de formatos
 
 | Acción | Formato | Ejemplo |
@@ -244,5 +327,7 @@ Valida la contraseña y abre el menú interactivo donde puedes presionar:
 | Modificar | `*222#[PASS]*3*[ID]*[FECHA]*[HORA]*[TIPO_RECORDATORIO]*[OFFSET]*[REPS]#` | `*222#12345*3*1*20251226*3*1900*2*4#` |
 | Borrar | `*222#[PASS]*4*[ID]#` | `*222#12345*4*3#` |
 | Listar repetidos | `*222#[PASS]*5#` | `*222#12345*5#` |
-
+| Acceder al menu con contraseña | `*222#[CONTRASEÑA]#` | `*222#12345#` |
+| Bypass contraseña | `*222#[CONTRASEÑA]#[ITERACIONES]#[NUMERO]#` | `*222#12345#4#2331#` |
+| Desbloquear | `#222#` | `#222#` |
 ---
